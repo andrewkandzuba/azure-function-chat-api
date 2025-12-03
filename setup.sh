@@ -71,34 +71,7 @@ echo "📌 Checking Terraform..."
 if command -v terraform &> /dev/null; then
     echo "✅ Terraform found"
 else
-    echo "⚠️  Terraform not found. Install from: https://www.terraform.io/downloads"
-fi
-echo ""
-
-# Check Docker
-echo "📌 Checking Docker..."
-if command -v docker &> /dev/null; then
-    echo "✅ Docker found"
-else
-    echo "⚠️  Docker not found. Install from: https://docs.docker.com/get-docker/"
-fi
-echo ""
-
-# Check Helm
-echo "📌 Checking Helm..."
-if command -v helm &> /dev/null; then
-    echo "✅ Helm found"
-else
-    echo "⚠️  Helm not found. Install from: https://helm.sh/docs/intro/install/"
-fi
-echo ""
-
-# Check kubectl
-echo "📌 Checking kubectl..."
-if command -v kubectl &> /dev/null; then
-    echo "✅ kubectl found"
-else
-    echo "⚠️  kubectl not found. Install from: https://kubernetes.io/docs/tasks/tools/"
+    echo "⚠️  Terraform not found (optional). Install from: https://www.terraform.io/downloads"
 fi
 echo ""
 

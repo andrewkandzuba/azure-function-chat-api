@@ -62,39 +62,3 @@ variable "tags" {
   }
 }
 
-# AKS/Container variables (optional)
-variable "enable_aks_deployment" {
-  description = "Enable AKS cluster creation for Helm deployment"
-  type        = bool
-  default     = false
-}
-
-variable "container_registry_name" {
-  description = "Name of the Azure Container Registry"
-  type        = string
-  default     = "chatapiacr"
-}
-
-variable "aks_cluster_name" {
-  description = "Name of the AKS cluster"
-  type        = string
-  default     = "chatapi-aks"
-}
-
-variable "aks_dns_prefix" {
-  description = "DNS prefix for the AKS cluster"
-  type        = string
-  default     = "chatapi"
-}
-
-variable "aks_node_count" {
-  description = "Number of nodes in the AKS cluster"
-  type        = number
-  default     = 2
-}
-
-variable "aks_vm_size" {
-  description = "VM size for AKS nodes"
-  type        = string
-  default     = "Standard_D2_v2"
-}
