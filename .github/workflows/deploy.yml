@@ -1,0 +1,286 @@
+name: Build and Deploy Azure Function
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  AZURE_FUNCTIONAPP_NAME: ${{ vars.AZURE_FUNCTIONAPP_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  CONTAINER_REGISTRY: ${{ vars.CONTAINER_REGISTRY }}
+  AKS_CLUSTER_NAME: ${{ vars.AKS_CLUSTER_NAME }}
+  HELM_RELEASE_NAME: azure-function-chat-api
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+    
+    - name: Run linting
+      run: |
+        flake8 function_app.py --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 function_app.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run type checking
+      run: |
+        mypy function_app.py --ignore-missing-imports
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/ -v --cov=function_app --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  terraform:
+    name: Terraform Infrastructure
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    defaults:
+      run:
+        working-directory: ./terraform
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+    
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
+          -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
+          -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
+          -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"
+      env:
+        ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+    
+    - name: Terraform Validate
+      run: terraform validate
+    
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+      env:
+        ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+        TF_VAR_resource_group_name: ${{ vars.AZURE_RESOURCE_GROUP }}
+        TF_VAR_function_app_name: ${{ vars.AZURE_FUNCTIONAPP_NAME }}
+        TF_VAR_storage_account_name: ${{ vars.STORAGE_ACCOUNT_NAME }}
+        TF_VAR_app_service_plan_name: ${{ vars.APP_SERVICE_PLAN_NAME }}
+        TF_VAR_application_insights_name: ${{ vars.APPLICATION_INSIGHTS_NAME }}
+        TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME }}
+        TF_VAR_container_registry_name: ${{ vars.CONTAINER_REGISTRY }}
+        TF_VAR_enable_aks_deployment: ${{ vars.ENABLE_AKS_DEPLOYMENT }}
+    
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main'
+      run: terraform apply -auto-approve tfplan
+      env:
+        ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+    
+    - name: Get Terraform Outputs
+      id: terraform-outputs
+      run: |
+        echo "function_app_name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
+        echo "container_registry=$(terraform output -raw container_registry_login_server)" >> $GITHUB_OUTPUT || echo "container_registry=" >> $GITHUB_OUTPUT
+
+  build-and-deploy-function:
+    name: Deploy to Azure Functions
+    runs-on: ubuntu-latest
+    needs: [test, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Deploy to Azure Functions
+      uses: Azure/functions-action@v1
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: '.'
+        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+  build-and-push-container:
+    name: Build and Push Container Image
+    runs-on: ubuntu-latest
+    needs: [test, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_AKS_DEPLOYMENT == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v2
+      with:
+        login-server: ${{ env.CONTAINER_REGISTRY }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    
+    - name: Build and Push Docker Image
+      run: |
+        IMAGE_TAG=${{ github.sha }}
+        docker build -t ${{ env.CONTAINER_REGISTRY }}/azure-function-chat-api:${IMAGE_TAG} .
+        docker tag ${{ env.CONTAINER_REGISTRY }}/azure-function-chat-api:${IMAGE_TAG} \
+                   ${{ env.CONTAINER_REGISTRY }}/azure-function-chat-api:latest
+        docker push ${{ env.CONTAINER_REGISTRY }}/azure-function-chat-api:${IMAGE_TAG}
+        docker push ${{ env.CONTAINER_REGISTRY }}/azure-function-chat-api:latest
+    
+    - name: Save image tag
+      run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+  helm-deploy:
+    name: Deploy with Helm to AKS
+    runs-on: ubuntu-latest
+    needs: [build-and-push-container]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_AKS_DEPLOYMENT == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER_NAME }} \
+          --overwrite-existing
+    
+    - name: Create Kubernetes secrets
+      run: |
+        # Create ACR secret
+        kubectl create secret docker-registry acr-secret \
+          --docker-server=${{ env.CONTAINER_REGISTRY }} \
+          --docker-username=${{ secrets.ACR_USERNAME }} \
+          --docker-password=${{ secrets.ACR_PASSWORD }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Create application secrets
+        kubectl create secret generic azure-function-secrets \
+          --from-literal=storage-connection-string="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+          --from-literal=appinsights-key="${{ secrets.APPLICATION_INSIGHTS_KEY }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+    
+    - name: Deploy with Helm
+      run: |
+        helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./helm/azure-function \
+          --set image.repository=${{ env.CONTAINER_REGISTRY }}/azure-function-chat-api \
+          --set image.tag=${{ github.sha }} \
+          --set ingress.enabled=${{ vars.INGRESS_ENABLED }} \
+          --set ingress.hosts[0].host=${{ vars.INGRESS_HOST }} \
+          --wait \
+          --timeout 5m
+    
+    - name: Verify deployment
+      run: |
+        kubectl rollout status deployment/${{ env.HELM_RELEASE_NAME }} --timeout=5m
+        kubectl get pods -l app.kubernetes.io/name=azure-function-chat-api
+        kubectl get svc -l app.kubernetes.io/name=azure-function-chat-api
+
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [build-and-deploy-function]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Wait for deployment
+      run: sleep 30
+    
+    - name: Health Check
+      run: |
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+          https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/api/health)
+        if [ $RESPONSE -eq 200 ]; then
+          echo "Health check passed"
+        else
+          echo "Health check failed with status code: $RESPONSE"
+          exit 1
+        fi
+    
+    - name: Test Chat API
+      run: |
+        RESPONSE=$(curl -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"message":"test","user_id":"ci-test"}' \
+          -s -o /dev/null -w "%{http_code}" \
+          https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/api/chat?code=${{ secrets.AZURE_FUNCTION_KEY }})
+        if [ $RESPONSE -eq 200 ]; then
+          echo "Chat API test passed"
+        else
+          echo "Chat API test failed with status code: $RESPONSE"
+          exit 1
+        fi

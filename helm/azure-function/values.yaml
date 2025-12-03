@@ -1,0 +1,118 @@
+# Default values for azure-function-chat-api
+replicaCount: 2
+
+image:
+  repository: acrchatapi12345.azurecr.io/azure-function-chat-api
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets:
+  - name: acr-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: chatapi.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: chatapi-tls
+      hosts:
+        - chatapi.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Environment variables
+env:
+  - name: FUNCTIONS_WORKER_RUNTIME
+    value: "python"
+  - name: AzureWebJobsFeatureFlags
+    value: "EnableWorkerIndexing"
+  - name: ENVIRONMENT
+    value: "production"
+  - name: AzureFunctionsJobHost__Logging__Console__IsEnabled
+    value: "true"
+
+# Secrets from Azure Key Vault or Kubernetes secrets
+secrets:
+  # Azure Storage connection string
+  - name: AzureWebJobsStorage
+    valueFrom:
+      secretKeyRef:
+        name: azure-function-secrets
+        key: storage-connection-string
+  # Application Insights key
+  - name: APPINSIGHTS_INSTRUMENTATIONKEY
+    valueFrom:
+      secretKeyRef:
+        name: azure-function-secrets
+        key: appinsights-key
+
+# Health check configuration
+livenessProbe:
+  httpGet:
+    path: /api/health
+    port: 80
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/health
+    port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
