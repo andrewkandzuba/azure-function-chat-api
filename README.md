@@ -1,19 +1,44 @@
 # Azure Function Chat API
 
-A production-ready Azure Function App providing a REST API Chat endpoint with complete CI/CD pipeline, Infrastructure as Code (Terraform), and Kubernetes deployment (Helm charts).
+> **Complete Documentation** - All-in-one guide for deployment, development, and operations
 
-## 📋 Features
+A production-ready Azure Function App providing a REST API Chat endpoint with complete CI/CD pipeline and Infrastructure as Code (Terraform). Deployed exclusively using Azure CLI for simplicity and efficiency.
+
+---
+
+## 📋 Table of Contents
+
+- [Features](#-features)
+- [Architecture](#️-architecture)
+- [Quick Start](#-quick-start)
+- [Build Script (build.py)](#-build-script-buildpy)
+- [Deployment](#-deployment)
+- [Azure CLI Deployment](#-azure-cli-deployment-details)
+- [Infrastructure (Terraform)](#️-infrastructure-terraform)
+- [Configuration & Secrets](#-configuration--secrets)
+- [Testing](#-testing)
+- [Monitoring](#-monitoring)
+- [Project Structure](#-project-structure)
+- [Contributing](#-contributing)
+- [Troubleshooting](#-troubleshooting)
+- [Migration Notes](#-migration-notes)
+
+---
+
+## ✨ Features
 
 - **Azure Functions REST API** - Chat endpoint with request logging
 - **Health Check Endpoint** - For monitoring and load balancers
 - **Comprehensive Testing** - Unit tests with pytest and coverage reports
 - **CI/CD Pipeline** - GitHub Actions workflow with automated testing and deployment
 - **Infrastructure as Code** - Terraform for Azure resource provisioning
-- **Container Support** - Dockerized application for flexibility
-- **Kubernetes Deployment** - Helm charts for AKS deployment
+- **Azure CLI Deployment** - Direct zip deployment to Azure Functions
+- **Cross-Platform Build Tool** - Python-based build.py script (replaces Makefile)
 - **Secrets Management** - Azure Key Vault integration
 - **Monitoring** - Application Insights integration
-- **Auto-scaling** - Horizontal Pod Autoscaling for Kubernetes deployments
+- **No Docker Required** - Simplified deployment without containers
+
+---
 
 ## 🏗️ Architecture
 
@@ -24,8 +49,16 @@ A production-ready Azure Function App providing a REST API Chat endpoint with co
 3. **App Service Plan** - Hosting plan for the Function App
 4. **Application Insights** - Monitoring and logging
 5. **Azure Key Vault** - Secrets and certificate management
-6. **Azure Container Registry** - Docker image storage (optional)
-7. **Azure Kubernetes Service** - Container orchestration (optional)
+
+### Deployment Flow
+
+```
+Git Push → GitHub Actions → Tests → Terraform (Infrastructure)
+                              ↓
+                         Build Package → Azure CLI → Azure Functions
+                              ↓
+                         Smoke Tests
+```
 
 ### API Endpoints
 
@@ -62,321 +95,787 @@ Health check endpoint for monitoring.
 }
 ```
 
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- Azure CLI
-- Azure Functions Core Tools
-- Docker (for containerized deployment)
-- Terraform 1.0+
-- Helm 3.0+ (for Kubernetes deployment)
-- kubectl (for Kubernetes deployment)
+- **Python 3.11+** - [Download](https://www.python.org/downloads/)
+- **Azure CLI** - [Install Guide](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- **Azure Functions Core Tools** - [Install Guide](https://docs.microsoft.com/azure/azure-functions/functions-run-local)
+- **Git** - [Download](https://git-scm.com/downloads)
+- **Terraform 1.0+** (optional) - [Download](https://www.terraform.io/downloads)
 
-### Local Development
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd azure-function-chat-api
-   ```
-
-2. **Create virtual environment:**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-4. **Run locally:**
-   ```bash
-   func start
-   ```
-
-5. **Test the API:**
-   ```bash
-   # Health check
-   curl http://localhost:7071/api/health
-
-   # Chat API
-   curl -X POST http://localhost:7071/api/chat \
-     -H "Content-Type: application/json" \
-     -d '{"message":"Hello","user_id":"test"}'
-   ```
-
-### Running Tests
+### 5-Minute Setup
 
 ```bash
-# Run all tests
-pytest
+# 1. Clone the repository
+git clone <repository-url>
+cd azure-function-chat-api
 
-# Run with coverage
-pytest --cov=function_app --cov-report=html
+# 2. Setup environment (creates venv and installs dependencies)
+python build.py setup
 
-# Run specific test file
-pytest tests/test_chat_api.py -v
+# 3. Activate virtual environment
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 4. Start function locally
+python build.py func-start
 ```
+
+### Test the API
+
+```bash
+# Health check
+curl http://localhost:7071/api/health
+
+# Chat API
+curl -X POST http://localhost:7071/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello","user_id":"test"}'
+```
+
+---
+
+## 🛠️ Build Script (build.py)
+
+**Cross-platform Python build tool** that replaces Makefile. Works on Windows, macOS, and Linux.
+
+### Features
+
+- ✅ **Cross-platform** - No need for make, WSL, or Cygwin
+- ✅ **Colored output** - Green ✅, Red ❌, Yellow ⚠️ indicators
+- ✅ **Smart packaging** - Automatic exclusion of dev files
+- ✅ **Environment variables** - Supports FUNCTION_APP_NAME and RESOURCE_GROUP
+- ✅ **Error handling** - Clear error messages with suggestions
+
+### Available Commands
+
+```bash
+# View all commands
+python build.py help
+
+# Development
+python build.py setup          # Setup environment
+python build.py clean          # Clean artifacts
+python build.py test           # Run tests
+python build.py coverage       # Test with coverage
+python build.py lint           # Run linting
+python build.py format         # Format code
+python build.py all            # Run all checks
+python build.py func-start     # Start locally
+
+# Deployment
+python build.py az-package     # Create deployment package
+python build.py az-deploy      # Deploy to Azure
+  --function-app <name> 
+  --resource-group <group>
+
+# Infrastructure
+python build.py tf-init        # Initialize Terraform
+python build.py tf-plan        # Plan infrastructure
+python build.py tf-apply       # Apply infrastructure
+```
+
+### Usage Examples
+
+**Local Development:**
+```bash
+# Format and check code
+python build.py format
+python build.py lint
+python build.py test
+
+# Or run all at once
+python build.py all
+```
+
+**Deployment:**
+```bash
+# Using command line arguments
+python build.py az-deploy \
+  --function-app func-chatapi-prod \
+  --resource-group rg-chatapi-prod
+
+# Using environment variables
+export FUNCTION_APP_NAME=func-chatapi-prod
+export RESOURCE_GROUP=rg-chatapi-prod
+python build.py az-deploy
+```
+
+---
 
 ## 📦 Deployment
 
-### Option 1: Direct Azure Functions Deployment
+### Method 1: GitHub Actions (Automatic CI/CD)
 
-1. **Configure Azure credentials:**
-   Set up the following GitHub secrets:
-   - `AZURE_CREDENTIALS` - Azure service principal credentials
-   - `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` - Function App publish profile
+**Recommended for production deployments**
 
-2. **Configure GitHub variables:**
-   - `AZURE_FUNCTIONAPP_NAME` - Your Function App name
-   - `AZURE_RESOURCE_GROUP` - Resource group name
-
-3. **Push to main branch:**
+1. **Configure GitHub Secrets** (see [Configuration & Secrets](#-configuration--secrets))
+2. **Push to main branch:**
    ```bash
    git push origin main
    ```
 
-### Option 2: Kubernetes (AKS) Deployment
+The workflow automatically:
+- ✅ Runs linting and tests
+- ✅ Provisions/updates infrastructure via Terraform
+- ✅ Creates deployment package
+- ✅ Deploys to Azure Functions
+- ✅ Runs smoke tests
 
-1. **Configure additional secrets:**
-   - `ACR_USERNAME` - Azure Container Registry username
-   - `ACR_PASSWORD` - Azure Container Registry password
-   - `AZURE_STORAGE_CONNECTION_STRING` - Storage connection string
-   - `APPLICATION_INSIGHTS_KEY` - App Insights instrumentation key
+### Method 2: Local Deployment with build.py
 
-2. **Configure additional variables:**
-   - `ENABLE_AKS_DEPLOYMENT=true`
-   - `CONTAINER_REGISTRY` - ACR login server
-   - `AKS_CLUSTER_NAME` - AKS cluster name
-   - `INGRESS_ENABLED` - Enable ingress (true/false)
-   - `INGRESS_HOST` - Ingress hostname
-
-3. **Deploy:**
-   ```bash
-   git push origin main
-   ```
-
-## 🔧 Terraform Infrastructure
-
-### Initialize Terraform
+**Recommended for development/testing**
 
 ```bash
+python build.py az-deploy \
+  --function-app your-function-app \
+  --resource-group your-resource-group
+```
+
+### Method 3: Manual Azure CLI
+
+```bash
+# 1. Create package
+pip install --target ./.python_packages/lib/site-packages -r requirements.txt
+zip -r function-app.zip . \
+  -x "*.git*" "*tests*" "*__pycache__*" "*.pytest_cache*" \
+  "*venv*" "*.vscode*" "*terraform*" "*helm*" \
+  "*.github*" "*requirements-dev.txt" "*.md"
+
+# 2. Deploy to Azure
+az functionapp deployment source config-zip \
+  --resource-group your-resource-group \
+  --name your-function-app \
+  --src function-app.zip \
+  --build-remote true
+
+# 3. Configure settings (optional)
+az functionapp config appsettings set \
+  --resource-group your-resource-group \
+  --name your-function-app \
+  --settings \
+    FUNCTIONS_WORKER_RUNTIME=python \
+    PYTHON_VERSION=3.11 \
+    ENVIRONMENT=production
+```
+
+---
+
+## 🔧 Azure CLI Deployment Details
+
+### Package Creation
+
+The deployment package includes:
+- ✅ `function_app.py` - Main application code
+- ✅ `host.json` - Function host configuration
+- ✅ `requirements.txt` - Python dependencies
+- ✅ `.python_packages/` - Installed dependencies
+
+The deployment package excludes:
+- ❌ Tests and test configurations
+- ❌ Development dependencies
+- ❌ Documentation files (*.md)
+- ❌ Git history
+- ❌ Virtual environments
+- ❌ Terraform/Helm configurations
+
+### Remote Build
+
+Using `--build-remote true` means:
+1. Azure extracts the zip package
+2. Installs Python dependencies on Azure infrastructure
+3. Builds native extensions for target environment
+4. Optimizes deployment for production
+
+**Benefits:**
+- Smaller upload size
+- Correct binary compatibility
+- Faster parallel builds on Azure
+
+### Package Validation
+
+```bash
+# Create and validate package
+python build.py az-package
+./validate-package.sh
+```
+
+The validation script checks:
+- Package size (warns if > 50MB or > 100MB)
+- Required files present
+- No excluded files included
+
+---
+
+## 🏗️ Infrastructure (Terraform)
+
+### Quick Setup
+
+```bash
+# Initialize Terraform
+python build.py tf-init
+
+# Or manually
 cd terraform
 terraform init
 ```
 
 ### Configure Variables
 
-Copy the example variables file and customize:
+Copy and customize the example file:
 ```bash
-cp terraform.tfvars.example terraform.tfvars
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 # Edit terraform.tfvars with your values
 ```
 
 ### Deploy Infrastructure
 
 ```bash
+# Using build.py
+python build.py tf-plan   # Preview changes
+python build.py tf-apply  # Apply changes
+
+# Or manually
+cd terraform
 terraform plan
 terraform apply
 ```
 
 ### Infrastructure Components
 
-The Terraform configuration creates:
-- Resource Group
-- Storage Account
-- App Service Plan
-- Function App with managed identity
-- Application Insights
-- Key Vault with access policies
-- Container Registry (optional)
-- AKS Cluster (optional)
+Terraform creates:
+- ✅ Resource Group
+- ✅ Storage Account
+- ✅ App Service Plan (Linux)
+- ✅ Function App with managed identity
+- ✅ Application Insights
+- ✅ Key Vault with access policies
 
-## 🎛️ Configuration
+**Removed components** (no longer used):
+- ❌ Azure Container Registry
+- ❌ Azure Kubernetes Service (AKS)
 
-### GitHub Secrets
+### Required Terraform Variables
 
-| Secret | Description | Required |
-|--------|-------------|----------|
-| `AZURE_CREDENTIALS` | Azure service principal JSON | Yes |
-| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` | Function App publish profile | Yes (Function deployment) |
-| `ARM_CLIENT_ID` | Azure client ID for Terraform | Yes (Terraform) |
-| `ARM_CLIENT_SECRET` | Azure client secret | Yes (Terraform) |
-| `ARM_SUBSCRIPTION_ID` | Azure subscription ID | Yes (Terraform) |
-| `ARM_TENANT_ID` | Azure tenant ID | Yes (Terraform) |
-| `TF_BACKEND_RESOURCE_GROUP` | Terraform backend resource group | Yes (Terraform) |
-| `TF_BACKEND_STORAGE_ACCOUNT` | Terraform backend storage account | Yes (Terraform) |
-| `TF_BACKEND_CONTAINER` | Terraform backend container | Yes (Terraform) |
-| `TF_BACKEND_KEY` | Terraform state file key | Yes (Terraform) |
-| `ACR_USERNAME` | ACR username | Yes (AKS deployment) |
-| `ACR_PASSWORD` | ACR password | Yes (AKS deployment) |
-| `AZURE_STORAGE_CONNECTION_STRING` | Storage connection string | Yes (AKS deployment) |
-| `APPLICATION_INSIGHTS_KEY` | App Insights key | Yes (AKS deployment) |
-| `AZURE_FUNCTION_KEY` | Function key for smoke tests | Yes (smoke tests) |
-
-### GitHub Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AZURE_FUNCTIONAPP_NAME` | Function App name | - |
-| `AZURE_RESOURCE_GROUP` | Resource group name | - |
-| `STORAGE_ACCOUNT_NAME` | Storage account name | - |
-| `APP_SERVICE_PLAN_NAME` | App Service Plan name | - |
-| `APPLICATION_INSIGHTS_NAME` | App Insights name | - |
-| `KEY_VAULT_NAME` | Key Vault name | - |
-| `ENABLE_AKS_DEPLOYMENT` | Enable AKS deployment | `false` |
-| `CONTAINER_REGISTRY` | ACR login server | - |
-| `AKS_CLUSTER_NAME` | AKS cluster name | - |
-| `INGRESS_ENABLED` | Enable Kubernetes ingress | `false` |
-| `INGRESS_HOST` | Ingress hostname | - |
-
-## 🐳 Docker Support
-
-### Build Docker Image
-
-```bash
-docker build -t azure-function-chat-api:latest .
+```hcl
+resource_group_name         = "rg-chatapi-prod"
+location                    = "eastus"
+storage_account_name        = "stchatapiprod"       # Must be globally unique
+app_service_plan_name       = "asp-chatapi-prod"
+function_app_name           = "func-chatapi-prod"   # Must be globally unique
+application_insights_name   = "appi-chatapi-prod"
+key_vault_name             = "kv-chatapi-prod"      # Must be globally unique
+environment                = "production"
 ```
 
-### Run Container Locally
+---
 
+## 🔐 Configuration & Secrets
+
+### Required GitHub Secrets
+
+#### Azure Authentication
+- `AZURE_CREDENTIALS` - Service principal JSON:
+  ```json
+  {
+    "clientId": "<client-id>",
+    "clientSecret": "<client-secret>",
+    "subscriptionId": "<subscription-id>",
+    "tenantId": "<tenant-id>"
+  }
+  ```
+
+#### Terraform
+- `ARM_CLIENT_ID` - Azure client ID
+- `ARM_CLIENT_SECRET` - Azure client secret
+- `ARM_SUBSCRIPTION_ID` - Azure subscription ID
+- `ARM_TENANT_ID` - Azure tenant ID
+
+#### Terraform Backend
+- `TF_BACKEND_RESOURCE_GROUP` - Backend resource group
+- `TF_BACKEND_STORAGE_ACCOUNT` - Backend storage account
+- `TF_BACKEND_CONTAINER` - Backend container name
+- `TF_BACKEND_KEY` - State file key
+
+#### Optional
+- `AZURE_FUNCTION_KEY` - For smoke tests
+
+### Required GitHub Variables
+
+- `AZURE_FUNCTIONAPP_NAME` - Function App name
+- `AZURE_RESOURCE_GROUP` - Resource group name
+- `STORAGE_ACCOUNT_NAME` - Storage account name
+- `APP_SERVICE_PLAN_NAME` - App Service Plan name
+- `APPLICATION_INSIGHTS_NAME` - Application Insights name
+- `KEY_VAULT_NAME` - Key Vault name
+
+### Setup Guide
+
+**1. Create Azure Service Principal:**
 ```bash
-docker run -p 8080:80 \
-  -e AzureWebJobsStorage="UseDevelopmentStorage=true" \
-  -e FUNCTIONS_WORKER_RUNTIME="python" \
-  azure-function-chat-api:latest
+az ad sp create-for-rbac --name "github-actions-chatapi" --role contributor \
+  --scopes /subscriptions/{subscription-id} \
+  --sdk-auth
 ```
 
-### Push to Azure Container Registry
-
+**2. Get Function App Key:**
 ```bash
-az acr login --name <your-acr-name>
-docker tag azure-function-chat-api:latest <your-acr>.azurecr.io/azure-function-chat-api:latest
-docker push <your-acr>.azurecr.io/azure-function-chat-api:latest
+az functionapp keys list \
+  --name <your-function-app> \
+  --resource-group <your-resource-group>
 ```
 
-## ☸️ Helm Deployment
+**3. Configure in GitHub:**
+- Go to repository Settings → Secrets and variables → Actions
+- Add secrets and variables listed above
 
-### Install/Upgrade Release
+---
 
-```bash
-helm upgrade --install azure-function-chat-api ./helm/azure-function \
-  --set image.repository=<your-acr>.azurecr.io/azure-function-chat-api \
-  --set image.tag=latest \
-  --namespace default
-```
+## 🧪 Testing
 
-### Customize Values
-
-Edit `helm/azure-function/values.yaml` or override values:
+### Running Tests
 
 ```bash
-helm upgrade --install azure-function-chat-api ./helm/azure-function \
-  --set replicaCount=3 \
-  --set resources.requests.memory=512Mi \
-  --set ingress.enabled=true \
-  --set ingress.hosts[0].host=chatapi.example.com
+# Using build.py (recommended)
+python build.py test           # Run all tests
+python build.py coverage       # With coverage report
+python build.py lint           # Run linting checks
+python build.py format         # Format code
+python build.py all            # Run all checks
+
+# Using pytest directly
+pytest
+pytest --cov=function_app --cov-report=html
+pytest tests/test_chat_api.py -v
 ```
 
-### Verify Deployment
+### Test Structure
 
-```bash
-kubectl get pods
-kubectl get svc
-kubectl logs -l app.kubernetes.io/name=azure-function-chat-api
 ```
+tests/
+├── __init__.py
+├── conftest.py           # Pytest fixtures
+└── test_chat_api.py      # API tests
+```
+
+### Writing Tests
+
+Follow AAA pattern (Arrange, Act, Assert):
+
+```python
+def test_chat_api_with_valid_message():
+    """Test chat API with a valid message"""
+    # Arrange
+    req = func.HttpRequest(
+        method='POST',
+        url='/api/chat',
+        body=json.dumps({'message': 'Hello'}).encode('utf-8')
+    )
+    
+    # Act
+    response = chat_api(req)
+    
+    # Assert
+    assert response.status_code == 200
+```
+
+### CI/CD Testing
+
+GitHub Actions automatically runs:
+1. Flake8 linting (critical errors)
+2. Mypy type checking
+3. Pytest unit tests with coverage
+4. Smoke tests after deployment
+
+---
 
 ## 📊 Monitoring
 
 ### Application Insights
 
-All logs are automatically sent to Application Insights. View them in the Azure Portal:
+All logs automatically sent to Application Insights.
 
-1. Navigate to your Application Insights resource
+**View in Azure Portal:**
+1. Navigate to Application Insights resource
 2. Go to "Logs" or "Live Metrics"
 3. Query logs using KQL
 
-### Kubernetes Monitoring
-
-```bash
-# View pod logs
-kubectl logs -f <pod-name>
-
-# View pod status
-kubectl describe pod <pod-name>
-
-# View service endpoints
-kubectl get endpoints
+**Example KQL Query:**
+```kql
+traces
+| where message contains "chat"
+| order by timestamp desc
+| take 100
 ```
 
-## 🔒 Security Best Practices
+### Azure CLI Monitoring
 
-1. **Never commit secrets** to the repository
-2. **Use Azure Key Vault** for sensitive configuration
-3. **Enable managed identities** for Azure resources
-4. **Implement RBAC** for AKS clusters
-5. **Use network policies** in Kubernetes
-6. **Enable HTTPS only** for production endpoints
-7. **Implement rate limiting** for API endpoints
-8. **Regularly update dependencies** and scan for vulnerabilities
+```bash
+# View live logs
+az functionapp log tail \
+  --name <function-app-name> \
+  --resource-group <resource-group>
 
-## 🧪 Testing Strategy
+# List app settings
+az functionapp config appsettings list \
+  --name <function-app-name> \
+  --resource-group <resource-group>
 
-- **Unit Tests**: Test individual functions and components
-- **Integration Tests**: Test API endpoints and Azure services
-- **Load Tests**: Verify performance under load
-- **Smoke Tests**: Post-deployment validation in CI/CD
+# Restart function
+az functionapp restart \
+  --name <function-app-name> \
+  --resource-group <resource-group>
+```
 
-## 📝 Development Workflow
+### Health Checks
 
-1. Create feature branch from `develop`
-2. Make changes and write tests
-3. Run tests locally
-4. Create pull request
-5. CI pipeline runs tests automatically
-6. Merge to `develop` for staging deployment
-7. Merge to `main` for production deployment
+```bash
+# Check health endpoint
+curl https://<function-app-name>.azurewebsites.net/api/health
+
+# Expected response
+{"status":"healthy","timestamp":"2024-01-01T12:00:00Z"}
+```
+
+---
+
+## 📁 Project Structure
+
+```
+azure-function-chat-api/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml              # CI/CD workflow
+├── terraform/
+│   ├── main.tf                     # Infrastructure
+│   ├── variables.tf                # Variables
+│   ├── outputs.tf                  # Outputs
+│   └── terraform.tfvars.example    # Example config
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py                 # Pytest config
+│   └── test_chat_api.py            # Tests
+├── .gitignore
+├── README.md                       # This file
+├── build.py                        # Build script ⭐
+├── function_app.py                 # Main application
+├── host.json                       # Function config
+├── local.settings.json             # Local settings
+├── pytest.ini                      # Pytest config
+├── requirements-dev.txt            # Dev dependencies
+├── requirements.txt                # Production deps
+├── setup.sh                        # Environment setup
+└── validate-package.sh             # Package validator
+```
+
+### Key Files
+
+- **build.py** - Cross-platform build and deployment script
+- **function_app.py** - Main Azure Function application
+- **host.json** - Azure Functions host configuration
+- **requirements.txt** - Production Python dependencies
+- **terraform/** - Infrastructure as Code
+
+---
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Quick Guide
 
-## 📄 License
+1. **Fork the repository**
+2. **Create feature branch:**
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+3. **Make changes and test:**
+   ```bash
+   python build.py format
+   python build.py lint
+   python build.py test
+   ```
+4. **Commit with conventional commits:**
+   ```bash
+   git commit -m "feat: add amazing feature"
+   ```
+5. **Push and create PR:**
+   ```bash
+   git push origin feature/amazing-feature
+   ```
 
-This project is licensed under the MIT License.
+### Commit Convention
+
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation changes
+- `style:` Code formatting
+- `refactor:` Code refactoring
+- `test:` Adding/updating tests
+- `chore:` Maintenance tasks
+
+### Code Standards
+
+- Follow PEP 8 style guide
+- Use Black for formatting (88 char line length)
+- Add type hints where appropriate
+- Write docstrings for functions
+- Maintain or improve test coverage
+
+### Pull Request Checklist
+
+- [ ] Code follows project style
+- [ ] Tests added for new functionality
+- [ ] All tests pass locally
+- [ ] Documentation updated
+- [ ] Commit messages follow convention
+- [ ] No merge conflicts
+
+---
 
 ## 🆘 Troubleshooting
 
-### Function App not responding
-- Check Application Insights logs
-- Verify storage account connection
-- Check Function App configuration
+### Common Issues
 
-### Kubernetes pod not starting
-- Check pod logs: `kubectl logs <pod-name>`
-- Verify image pull secrets
-- Check resource limits
+#### Function App not responding
 
-### Terraform apply fails
-- Verify Azure credentials
-- Check resource name uniqueness
-- Review Terraform state
+**Check logs:**
+```bash
+az functionapp log tail --name <app> --resource-group <rg>
+```
 
-## 📞 Support
+**Verify configuration:**
+```bash
+az functionapp config appsettings list --name <app> --resource-group <rg>
+```
 
-For issues and questions:
-- Create an issue in the GitHub repository
-- Check Application Insights for logs and errors
-- Review Azure Monitor for infrastructure issues
+**Restart function:**
+```bash
+az functionapp restart --name <app> --resource-group <rg>
+```
 
-## 🔄 Version History
+#### Deployment fails
 
-- **1.0.0** - Initial release with Azure Functions, Terraform, and Helm support
+**Check authentication:**
+```bash
+az login
+az account show
+```
+
+**Verify function app exists:**
+```bash
+az functionapp show --name <app> --resource-group <rg>
+```
+
+**Check package size:**
+```bash
+ls -lh function-app.zip
+# Should be < 100MB, ideally < 50MB
+```
+
+#### Package too large
+
+**Use remote build (automatic in build.py):**
+```bash
+az functionapp deployment source config-zip \
+  --resource-group <rg> \
+  --name <app> \
+  --src function-app.zip \
+  --build-remote true  # ← This is important
+```
+
+**Check package contents:**
+```bash
+unzip -l function-app.zip | less
+```
+
+#### Terraform errors
+
+**Resource name conflicts:**
+- Storage accounts, Key Vaults, and Function Apps must be globally unique
+- Try adding random suffix or use different naming
+
+**State locking:**
+```bash
+# If state is locked
+terraform force-unlock <lock-id>
+```
+
+**Reset state:**
+```bash
+# CAREFUL: This removes state
+rm -rf .terraform terraform.tfstate*
+terraform init
+```
+
+#### Build.py errors
+
+**Virtual environment issues:**
+```bash
+# Recreate venv
+rm -rf .venv
+python build.py setup
+```
+
+**Missing dependencies:**
+```bash
+pip install -r requirements-dev.txt
+```
+
+**Permission denied (Unix/macOS):**
+```bash
+chmod +x build.py
+./build.py help
+```
+
+### Getting Help
+
+1. Check Application Insights logs
+2. Review Azure Monitor metrics
+3. Check this README troubleshooting section
+4. Create GitHub issue with:
+   - Error message
+   - Steps to reproduce
+   - Environment details
+   - Relevant logs
+
+---
+
+## 📝 Migration Notes
+
+### From Docker/Kubernetes to Azure CLI
+
+This project was migrated from Docker/Kubernetes deployment to Azure CLI deployment for simplicity and cost reduction.
+
+#### What Changed
+
+**Removed:**
+- ❌ Makefile (replaced by build.py)
+- ❌ Dockerfile
+- ❌ .dockerignore
+- ❌ Azure Container Registry (ACR)
+- ❌ Azure Kubernetes Service (AKS)
+- ❌ Helm charts (still in repo but not used)
+
+**Added:**
+- ✅ build.py - Cross-platform build script
+- ✅ Azure CLI zip deployment
+- ✅ Direct Azure Functions deployment
+- ✅ Simplified documentation
+
+#### Benefits
+
+- 💰 **Lower costs** - No ACR or AKS charges
+- 🚀 **Faster deployment** - No Docker build/push
+- 🎯 **Simpler architecture** - Single deployment path
+- 🌍 **Better cross-platform** - build.py works on Windows
+- 📦 **Smaller packages** - Remote build on Azure
+
+#### Command Migration
+
+| Old (Makefile) | New (build.py) |
+|----------------|----------------|
+| `make setup` | `python build.py setup` |
+| `make test` | `python build.py test` |
+| `make az-deploy ...` | `python build.py az-deploy --function-app ... --resource-group ...` |
+
+### From Makefile to build.py
+
+**Why the change?**
+- Cross-platform compatibility (Windows without WSL)
+- Better error handling and messages
+- Colored output for better UX
+- No external dependencies (just Python)
+
+**Migration is seamless:**
+- All commands have equivalent names
+- Same functionality, better UX
+- Can keep both during transition
+
+---
+
+## 📚 Additional Resources
+
+### Documentation Files (Historical)
+
+These files contain additional details but are summarized in this README:
+- `BUILD_SCRIPT.md` - Detailed build.py documentation
+- `AZURE_CLI_DEPLOYMENT.md` - Extended Azure CLI guide
+- `DEPLOYMENT_CHANGES.md` - Migration history
+- `CLEANUP_SUMMARY.md` - Cleanup details
+- `MAKEFILE_TO_BUILDPY.md` - Migration guide
+- `PROJECT_STRUCTURE.md` - Detailed structure
+- `SECRETS_SETUP.md` - Extended secrets guide
+- `QUICKSTART.md` - Quick start guide
+
+### External Links
+
+- [Azure Functions Python Guide](https://docs.microsoft.com/azure/azure-functions/functions-reference-python)
+- [Azure CLI Reference](https://docs.microsoft.com/cli/azure/)
+- [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
+- [Python Packaging Guide](https://packaging.python.org/)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 🎉 Quick Reference Card
+
+### Essential Commands
+
+```bash
+# Setup
+python build.py setup
+
+# Development
+python build.py all                    # Run all checks
+python build.py func-start             # Start locally
+
+# Deployment
+python build.py az-deploy \
+  --function-app <name> \
+  --resource-group <group>
+
+# Infrastructure
+python build.py tf-apply               # Deploy infrastructure
+
+# Testing
+python build.py test                   # Run tests
+python build.py coverage               # With coverage
+
+# Utilities
+python build.py help                   # Show all commands
+python build.py clean                  # Clean artifacts
+```
+
+### Useful Azure CLI Commands
+
+```bash
+# Logs
+az functionapp log tail --name <app> --resource-group <rg>
+
+# Deploy
+az functionapp deployment source config-zip \
+  --resource-group <rg> --name <app> \
+  --src function-app.zip --build-remote true
+
+# Settings
+az functionapp config appsettings set \
+  --resource-group <rg> --name <app> \
+  --settings KEY=VALUE
+
+# Status
+az functionapp show --name <app> --resource-group <rg>
+```
+
+---
+
+**Made with ❤️ for Azure Functions**
+
+*Last Updated: December 3, 2025*
+
